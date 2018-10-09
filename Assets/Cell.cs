@@ -1,0 +1,58 @@
+﻿using System;
+using UnityEngine;
+using UnityEngine.UI;
+
+public enum CellStatus
+{
+    Start,
+    Open,
+    Close,
+    Use,
+}
+public class Cell : MonoBehaviour
+{
+    CellStatus _cellStatus = CellStatus.Open;
+
+    public CellStatus Status
+    {
+        get { return _cellStatus; }
+        set
+        {
+            _cellStatus = value;
+            switch (_cellStatus)
+            {
+                    case CellStatus.Start:
+                    GetComponent<Image>().color = Color.green;
+                    break;
+                    case CellStatus.Open:
+                    GetComponent<Image>().color = Color.gray;
+                    break;
+                    case CellStatus.Close:
+                    GetComponent<Image>().color = Color.black;
+                    break;
+            }
+            //TODO 外形变化
+        }
+    }
+    public int posX;
+    public int posY;
+    public Cell upCell;
+    public Cell downCell;
+    public Cell leftCell;
+    public Cell rightCell;
+    public void OnClick()
+    {
+        if(OnCellClickAction!=null)
+        {
+            OnCellClickAction(this);
+        }
+    }
+
+    public void LookAt(Vector3 pos)
+    {
+        transform.LookAt(pos);
+
+    }
+
+    public Action<Cell> OnCellClickAction;
+}
