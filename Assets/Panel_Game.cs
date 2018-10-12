@@ -1,17 +1,10 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 
-public enum dirction
-{
-    start,
-    up,
-    down,
-    left,
-    right,
-}
 public class Panel_Game : MonoBehaviour
 {
     public PanelStart PanelStart;
@@ -22,17 +15,28 @@ public class Panel_Game : MonoBehaviour
     public Toggle OpenToggle;
     public LineRenderer LineRenderer;
     //n *n 的所有格子列表
-     List<Cell> cellList= new List<Cell>();
-      Cell startCell;
-      private bool result = false;
-
+    private Cell[][] cells;
+    Cell startCell;
+    Cell endCell;
+    /// <summary>
+    /// 只有一个打开邻居的格子
+    /// </summary>
+    Cell OneOpenNeighboeCell;
+    //开局打开格子数量
+    private int openCellCnt = 0;
+    private bool result = false;
+    private string TipString1 =  "未设置起始点";
+    private string TipString2 = "成功! 用时:";
+    private string TipString3 = "失败";
     public void OnReturnClick()
     {
         logText.text = String.Empty;
         answerCells.Clear();
+        openCellCnt = 0;
         result = false;
-        cellList.Clear();
+        cells = null;
         startCell = null;
+        endCell = null;
         while(GridLayout.transform.childCount>0)
         {
             DestroyImmediate(GridLayout.transform.GetChild(0).gameObject);
@@ -52,9 +56,10 @@ public class Panel_Game : MonoBehaviour
     public void CreatGrid(int length,int width)
     {
         result = false;
-        cellList.Clear();
+        cells = new Cell[length][]; 
         for (int i = 0; i < length; i++)
         {
+            cells[i] = new Cell[width];
             for (int j = 0; j < width; j++)
             {
                 Cell cell = Instantiate(cellPrefab);
@@ -64,14 +69,11 @@ public class Panel_Game : MonoBehaviour
                 cell.transform.localPosition = Vector3.zero;
                 cell.transform.localScale = Vector3.one;
                 cell.gameObject.SetActive(true);
-                cellList.Add(cell);
+                cell.OnCellClickAction = OnCellClick;
+                cells[i][j] = cell;
             }
         }
         GridLayout.constraintCount = width;
-        foreach(var cell in cellList)
-        {
-            cell.OnCellClickAction = OnCellClick;
-        }
     }
 
     public void CreatLine()
@@ -81,28 +83,43 @@ public class Panel_Game : MonoBehaviour
         //校验
         if(startCell == null)
         {
-            logText.text = "未设置起始点";
+            logText.text =TipString1;
             return;
         }
-        logText.text = String.Empty;
-        InitCells(cellList);
-        if(DPS(startCell))
+        openCellCnt=InitCells(cells);
+        var  oneNeighborCells= GetOneNeighborOpenCells();
+        if(oneNeighborCells.Count > 1)
         {
-            Vector3[] pos = answerCells.Select((a) => { return a.transform.position + Vector3.back; }).ToArray();
-            List<Vector3> LinePos = new List<Vector3>();
+            logText.text = TipString3;
+            return;
+        }
+        else if(oneNeighborCells.Count==1)
+        {
+            endCell = oneNeighborCells[0];
+        }
+        logText.text = String.Empty;
+        DateTime dataDateTime1 = DateTime.Now;
+        if(DFS(startCell))
+        {
+            Vector3[] pos = answerCells.Select((a) => a.transform.position + Vector3.back).ToArray();
+            List<Vector3> linePos = new List<Vector3>();
             for(int i = 0;i < pos.Length - 1;i++)
             {
                 Vector3[] temp = SplitVector3(pos[i],pos[i + 1],5);
-                LinePos.AddRange(temp.ToList());
+                linePos.AddRange(temp.ToList());
             }
-            LineRenderer.SetVertexCount(LinePos.Count);
-            LineRenderer.SetPositions(LinePos.ToArray());
-            logText.text = "成功!";
+            LineRenderer.SetVertexCount(linePos.Count);
+            LineRenderer.SetPositions(linePos.ToArray());
+            logText.text = TipString2;
             result = true;
+            DateTime dataDateTime2 = DateTime.Now;
+            int s = (dataDateTime2 - dataDateTime1).Seconds;
+            int ms = (dataDateTime2 - dataDateTime1).Milliseconds;
+            logText.text +="  "+ s + "s " + ms + "ms ";
         }
         else
         {
-            logText.text = "失败";
+            logText.text = TipString3;
             result = false;
         }
     }
@@ -111,50 +128,65 @@ public class Panel_Game : MonoBehaviour
     /// 初始化邻居关系
     /// </summary>
     /// <param name="cells"></param>
-    private void InitCells(List<Cell> cells)
+    private int InitCells(Cell[][] cells)
     {
-        for (int i = 0; i < cells.Count; i++)
+        int openCnt = 0;
+        for (int i = 0; i < cells.Length; i++)
         {
-
-            if (cells[i].Status==CellStatus.Close)
+            for (int j = 0; j < cells[i].Length; j++)
             {
-                continue;
-            }
-            if (cells[i].upCell ==null )
-            {
-                cells[i].upCell = GetCell(cells, cells[i].posX - 1, cells[i].posY);
-                if(cells[i].upCell != null)
-                    cells[i].upCell.downCell = cells[i];
-            }
-            if(cells[i].downCell == null)
-            {
-                cells[i].downCell = GetCell(cells,cells[i].posX + 1,cells[i].posY);
-                if(cells[i].downCell != null)
-                    cells[i].downCell.upCell = cells[i];
-            }
-            if(cells[i].leftCell == null)
-            {
-                cells[i].leftCell = GetCell(cells,cells[i].posX,cells[i].posY-1);
-                if(cells[i].leftCell != null)
-                    cells[i].leftCell.rightCell = cells[i];
-            }
-            if(cells[i].rightCell == null)
-            {
-                cells[i].rightCell = GetCell(cells,cells[i].posX,cells[i].posY+1);
-                if(cells[i].rightCell != null)
-                    cells[i].rightCell.leftCell = cells[i];
+                if (cells[i][j].Status == CellStatus.Close)
+                {
+                    continue;
+                }
+                openCnt++;
+                if(i - 1 >= 0)
+                {
+                    cells[i][j].NeighborCellsList.Add(cells[i - 1][j]);
+                }
+                if(i + 1 < cells.Length)
+                {
+                    cells[i][j].NeighborCellsList.Add(cells[i + 1][j]);
+                }
+                if(j - 1 >= 0)
+                {
+                    cells[i][j].NeighborCellsList.Add(cells[i][j - 1]);
+                }
+                if(j + 1 < cells[i].Length)
+                {
+                    cells[i][j].NeighborCellsList.Add(cells[i][j + 1]);
+                }
             }
         }
+        return openCnt;
     }
-
-    private Cell GetCell(List<Cell> cells,int x,int y)
+    /// <summary>
+    /// 开始时检测所有格子
+    /// </summary>
+    /// <returns></returns>
+    private List<Cell> GetOneNeighborOpenCells()
     {
-        foreach (var cell in cells)
+        List<Cell> retCells = new List<Cell>();
+        for(int i = 0;i < cells.Length;i++)
         {
-            if(cell.Status != CellStatus.Close && cell.posX == x && cell.posY == y)
-                return cell;
+            for(int j = 0;j < cells[i].Length;j++)
+            {
+                if (cells[i][j].Status==CellStatus.Open && cells[i][j].GetNeighborOpenCount()<=1)
+                {
+                    retCells.Add(cells[i][j]);
+                }
+            }
         }
-        return null;
+        return retCells;
+    }
+    /// <summary>
+    /// 遍历时 检测当前格子邻居只有一个出口的方法（当前格子只会影响自己邻居状态，不用遍历全部格子）
+    /// 这个可以写成扩展方法
+    /// </summary>
+    /// <returns></returns>
+    private static List<Cell> GetOneNeighborOpenCells(Cell cell)
+    {
+        return cell.NeighborCellsList.Where(cell1 => cell1.Status == CellStatus.Open && cell1.GetNeighborOpenCount() <= 1).ToList();
     }
 
     /// <summary>
@@ -178,52 +210,57 @@ public class Panel_Game : MonoBehaviour
     }
 
     List<Cell> answerCells = new List<Cell>();
-    private bool DPS(Cell cell)
+
+    private bool DFS(Cell cell)
     {
+        //TODO 当起始就有一个终点时
         cell.Status = CellStatus.Use;
+//        Debug.LogError(cell.posX+"  "+cell.posY);
         answerCells.Add(cell);
-        if(cell.upCell != null && cell.upCell.Status == CellStatus.Open)
+
+        Action undoAction = () =>
         {
-            if(DPS(cell.upCell))
-                return true;
+            answerCells.Remove(cell);
+            cell.Status = CellStatus.Open;
+        };
+
+        List<Cell> neighborOneOpen = GetOneNeighborOpenCells(cell);
+        if(neighborOneOpen.Count > 1 &&endCell!=null)//走一步 造成两个邻居死亡
+        {
+            undoAction();
+            return false;
         }
-         if(cell.downCell != null && cell.downCell.Status == CellStatus.Open)
+        if(neighborOneOpen.Count == 1)
         {
-            if(DPS(cell.downCell))
+            if(DFS(neighborOneOpen[0]))
+            {
+                return true;
+            }
+            else
+            {
+                undoAction();
+                return false;
+            }
+        }
+
+        if (cell.NeighborCellsList.Where(cell1 => cell1.Status == CellStatus.Open).Any(DFS))
+        {
             return true;
         }
-         if(cell.leftCell != null && cell.leftCell.Status == CellStatus.Open)
+         if(openCellCnt == answerCells.Count)
          {
-             if (DPS(cell.leftCell))
-                 return true;
-         }
-         if(cell.rightCell != null && cell.rightCell.Status == CellStatus.Open)
-         {
-             if (DPS(cell.rightCell))
-                 return true;
-         }
-
-         List<Cell> openCells = cellList.Where(a => a.Status == CellStatus.Open).ToList();
-         if(openCells.Count <= 0)
-         {
-             logText.text = "Success!";
              return true;
          }
-        answerCells.Remove(cell);
-        cell.Status = CellStatus.Open;
+        undoAction();
         return false;
     }
     void OnCellClick(Cell cell)
     {
         if(StartToggle.isOn)
         {
-            foreach(var cell1 in cellList)
+            if (null !=startCell)
             {
-                if(cell1.Status == CellStatus.Start)
-                {
-                    cell1.Status = CellStatus.Open;
-                    break;
-                }
+                startCell.Status = CellStatus.Open;
             }
             cell.Status = CellStatus.Start;
             startCell = cell;
@@ -238,6 +275,7 @@ public class Panel_Game : MonoBehaviour
             cell.Status = cell.Status == CellStatus.Open ? CellStatus.Close : CellStatus.Open;
         }
     }
+
     private void Update()
     {
         if(Input.GetKeyDown(KeyCode.Escape))

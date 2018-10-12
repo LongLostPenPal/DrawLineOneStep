@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -31,15 +33,13 @@ public class Cell : MonoBehaviour
                     GetComponent<Image>().color = Color.black;
                     break;
             }
-            //TODO 外形变化
         }
     }
     public int posX;
     public int posY;
-    public Cell upCell;
-    public Cell downCell;
-    public Cell leftCell;
-    public Cell rightCell;
+    public List<Cell> NeighborCellsList;
+
+    public Action<Cell> OnCellClickAction;
     public void OnClick()
     {
         if(OnCellClickAction!=null)
@@ -47,12 +47,8 @@ public class Cell : MonoBehaviour
             OnCellClickAction(this);
         }
     }
-
-    public void LookAt(Vector3 pos)
+    public int GetNeighborOpenCount()
     {
-        transform.LookAt(pos);
-
+        return NeighborCellsList.Count(cell => cell != null && cell.Status <= CellStatus.Open);
     }
-
-    public Action<Cell> OnCellClickAction;
 }
